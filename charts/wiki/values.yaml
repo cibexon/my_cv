@@ -1,7 +1,7 @@
 image:
   repository: ghcr.io/cibexon/my_cv
-  # CI (.github/workflows/ci.yaml) writes the new tag here after every image build; ArgoCD then rolls it out.
   tag: sha-39d53c6
+  # CI (.github/workflows/image.yaml) writes the new tag here after every image build; ArgoCD then rolls it out.
   pullPolicy: IfNotPresent
 
 replicaCount: 2

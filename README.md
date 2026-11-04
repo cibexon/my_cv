@@ -24,6 +24,8 @@ kind "lab" ◄── ArgoCD ◄────────────────�
 | CI/CD | [.github/workflows](.github/workflows) |
 | Учебные поломки для траблшутинга | [scenarios](scenarios), [scripts/break.sh](scripts/break.sh) |
 
+Подробные разборы: [устройство репозитория](docs/01-repo.md) · [GitHub Actions построчно](docs/02-github-actions.md) · [ArgoCD: установка и работа](docs/03-argocd.md).
+
 ## Запуск
 
 Нужны Docker Desktop, kind, kubectl, helm. Репозиторий уже на GitHub и образ уже собран CI (иначе поды будут в `ImagePullBackOff` до первой сборки).

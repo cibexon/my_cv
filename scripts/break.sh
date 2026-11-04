@@ -6,9 +6,11 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 tag=$(awk '/^  tag:/{print $2}' charts/wiki/values.yaml)   # the image ArgoCD runs, so it exists in GHCR
 
+# The tag goes in as a values file before the scenario: a later -f wins, while --set would override
+# every file, including 1-bad-image.yaml.
 deploy() {
   helm upgrade --install lab charts/wiki -n lab --create-namespace \
-    -f scenarios/_lab.yaml "$@" --set image.tag="$tag" >/dev/null
+    -f scenarios/_lab.yaml -f <(printf 'image:\n  tag: %s\n' "$tag") "$@" >/dev/null
 }
 
 case ${1:-list} in
