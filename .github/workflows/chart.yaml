@@ -1,0 +1,35 @@
+# Helm chart and ArgoCD manifests: lint + render + schema check, including every drill scenario.
+name: chart
+
+on:
+  push:
+    branches: [main]
+    paths: [charts/**, deploy/**, scenarios/**, .github/workflows/chart.yaml]
+  pull_request:
+    paths: [charts/**, deploy/**, scenarios/**, .github/workflows/chart.yaml]
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: azure/setup-helm@v5
+      - name: Install kubeconform
+        run: |
+          curl -sSL https://github.com/yannh/kubeconform/releases/download/v0.8.0/kubeconform-linux-amd64.tar.gz \
+            | sudo tar -xz -C /usr/local/bin kubeconform
+      - run: helm lint charts/wiki --strict
+      - name: Render and validate (default values and every scenario)
+        run: |
+          # CRDs (ServiceMonitor, PrometheusRule, Application) have no built-in schema: take them from the CRDs catalog.
+          check() { kubeconform -strict -summary \
+            -schema-location default \
+            -schema-location 'https://raw.githubusercontent.com/datreeio/CRDs-catalog/main/{{.Group}}/{{.ResourceKind}}_{{.ResourceAPIVersion}}.json'; }
+          helm template wiki charts/wiki -n wiki | check
+          for s in scenarios/[0-9]*.yaml; do
+            echo "== $s"
+            helm template lab charts/wiki -n lab -f scenarios/_lab.yaml -f "$s" | check
+          done
+          kubeconform -strict -summary -schema-location default \
+            -schema-location 'https://raw.githubusercontent.com/datreeio/CRDs-catalog/main/{{.Group}}/{{.ResourceKind}}_{{.ResourceAPIVersion}}.json' \
+            deploy/root.yaml deploy/apps/*.yaml

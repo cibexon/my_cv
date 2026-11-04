@@ -1,0 +1,61 @@
+{{- if .Values.slo.enabled }}
+{{- /* Every window used by an alert, plus 1h for the dashboard and the whole SLO period for the budget. */}}
+{{- $windows := dict "1h" true .Values.slo.period true }}
+{{- range .Values.slo.burnAlerts }}
+{{- $_ := set $windows .long true }}
+{{- $_ := set $windows .short true }}
+{{- end }}
+{{- $svc := include "wiki.fullname" . }}
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: {{ $svc }}-slo
+  labels:
+    {{- include "wiki.labels" . | nindent 4 }}
+spec:
+  groups:
+    # Recording rules: Prometheus computes these every 30s and stores the result as a new series,
+    # so alerts and the dashboard read one cheap series instead of re-running the 3-day rate() every time.
+    - name: {{ $svc }}-slo-recording
+      interval: 30s
+      rules:
+      {{- range $slo := list "availability" "latency" }}
+      {{- range $window, $_ := $windows }}
+        - record: slo:error_ratio:rate{{ $window }}
+          expr: |
+            {{- include "wiki.errorRatio" (dict "root" $ "slo" $slo "window" $window) | nindent 12 }}
+          labels:
+            slo: {{ $slo }}
+            service: {{ $svc }}
+      {{- end }}
+        # 1 = the whole budget is left, 0 = spent, negative = the SLO is broken for this period.
+        - record: slo:error_budget_remaining:ratio
+          expr: |
+            1 - slo:error_ratio:rate{{ $.Values.slo.period }}{slo="{{ $slo }}",service="{{ $svc }}"}
+                / (1 - {{ index $.Values.slo $slo "target" }})
+          labels:
+            slo: {{ $slo }}
+            service: {{ $svc }}
+      {{- end }}
+    - name: {{ $svc }}-slo-alerts
+      rules:
+      {{- range $slo := list "availability" "latency" }}
+      {{- $target := index $.Values.slo $slo "target" }}
+      {{- range $.Values.slo.burnAlerts }}
+        - alert: Wiki{{ title $slo }}BudgetBurn
+          expr: |
+            slo:error_ratio:rate{{ .long }}{slo="{{ $slo }}",service="{{ $svc }}"} > ({{ .burnRate }} * (1 - {{ $target }}))
+            and
+            slo:error_ratio:rate{{ .short }}{slo="{{ $slo }}",service="{{ $svc }}"} > ({{ .burnRate }} * (1 - {{ $target }}))
+          labels:
+            severity: {{ .severity }}
+            slo: {{ $slo }}
+            window: {{ .long }}
+          annotations:
+            summary: "{{ $svc }}: {{ $slo }} error budget burns {{ .burnRate }}x too fast ({{ .long }}/{{ .short }})"
+            description: >-
+              Error ratio over {{ .long }} is {{ "{{" }} $value | humanizePercentage {{ "}}" }} with SLO target
+              {{ $target }}: at this rate the {{ $.Values.slo.period }} budget is gone in {{ $.Values.slo.period }} / {{ .burnRate }}.
+      {{- end }}
+      {{- end }}
+{{- end }}

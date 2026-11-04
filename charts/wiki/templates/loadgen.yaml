@@ -1,0 +1,37 @@
+{{- if .Values.loadgen.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "wiki.fullname" . }}-loadgen
+  labels:
+    {{- include "wiki.labels" . | nindent 4 }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/instance: {{ .Release.Name }}
+      app.kubernetes.io/component: loadgen
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/instance: {{ .Release.Name }}
+        app.kubernetes.io/component: loadgen
+    spec:
+      securityContext:
+        runAsNonRoot: true
+      containers:
+        - name: loadgen
+          image: {{ include "wiki.image" . }}
+          args: ["loadgen"]
+          env:
+            - name: TARGET
+              value: http://{{ include "wiki.fullname" . }}.{{ .Release.Namespace }}.svc:{{ .Values.service.port }}
+            - name: RPS
+              value: {{ .Values.loadgen.rps | quote }}
+          resources:
+            requests:
+              cpu: 10m
+              memory: 16Mi
+            limits:
+              memory: 32Mi
+{{- end }}

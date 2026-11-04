@@ -1,0 +1,40 @@
+grafana:
+  adminPassword: admin             # lab only
+  service:
+    type: NodePort
+    nodePort: 30002                # http://localhost:3000
+  sidecar:
+    dashboards:
+      searchNamespace: ALL         # pick up ConfigMaps labelled grafana_dashboard=1 from every namespace (the wiki chart ships one)
+
+prometheus:
+  service:
+    type: NodePort
+    nodePort: 30003                # http://localhost:9090
+  prometheusSpec:
+    # By default the operator only takes ServiceMonitors/rules labelled with this Helm release;
+    # false = take them from every namespace, so the wiki chart does not need the release label.
+    serviceMonitorSelectorNilUsesHelmValues: false
+    podMonitorSelectorNilUsesHelmValues: false
+    ruleSelectorNilUsesHelmValues: false
+    retention: 7d
+    resources:
+      requests:
+        cpu: 100m
+        memory: 400Mi
+
+alertmanager:
+  service:
+    type: NodePort
+    nodePort: 30004                # http://localhost:9093
+
+# In kind these components listen on 127.0.0.1 inside the node, so their targets would be down
+# and fire alerts all the time.
+kubeEtcd:
+  enabled: false
+kubeControllerManager:
+  enabled: false
+kubeScheduler:
+  enabled: false
+kubeProxy:
+  enabled: false

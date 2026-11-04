@@ -1,0 +1,31 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: wiki
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/cibexon/my_cv.git
+    targetRevision: main
+    path: charts/wiki              # the chart in this repo; CI bumps image.tag in its values.yaml
+    helm:
+      releaseName: wiki
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: wiki
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true                # `kubectl edit` by hand is reverted to what Git says
+    syncOptions:
+      - CreateNamespace=true
+      - SkipDryRunOnMissingResource=true   # ServiceMonitor CRD may not exist yet on the very first sync
+    retry:
+      limit: 10
+      backoff:
+        duration: 30s
+        factor: 2
+        maxDuration: 5m

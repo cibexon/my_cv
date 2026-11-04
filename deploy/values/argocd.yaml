@@ -1,0 +1,16 @@
+# Used twice: by scripts/bootstrap.sh (first `helm install`) and by apps/argocd.yaml,
+# after which ArgoCD manages its own Helm release from Git.
+configs:
+  params:
+    server.insecure: true          # plain HTTP inside the lab; TLS would be terminated by an ingress in real life
+  cm:
+    timeout.reconciliation: 60s    # poll Git every minute instead of 2 (no webhook can reach a laptop)
+    timeout.reconciliation.jitter: 10s
+server:
+  service:
+    type: NodePort
+    nodePortHttp: 30001            # http://localhost:8081
+dex:
+  enabled: false                   # no SSO in the lab, only the local admin user
+notifications:
+  enabled: false

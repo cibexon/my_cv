@@ -1,0 +1,85 @@
+# Code or content changed → test → build a multi-arch image to GHCR → write its tag into the Helm values.
+# The last step is the whole "CD" part: ArgoCD notices the commit and rolls the new image out.
+name: image
+
+on:
+  push:
+    branches: [main]
+    paths: [app/**, content/**, Dockerfile, .github/workflows/image.yaml]
+  pull_request:
+    paths: [app/**, content/**, Dockerfile, .github/workflows/image.yaml]
+  workflow_dispatch:
+
+# One deploy at a time: two quick pushes must not race to commit values.yaml.
+concurrency:
+  group: image-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  IMAGE: ghcr.io/${{ github.repository }}
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: app/go.mod
+          cache-dependency-path: app/go.sum
+      - run: go vet ./...
+        working-directory: app
+      - run: go test -race ./...
+        working-directory: app
+
+  build:
+    needs: test
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write             # push to ghcr.io with the built-in GITHUB_TOKEN, no personal token
+    outputs:
+      tag: ${{ steps.meta.outputs.version }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: docker/setup-buildx-action@v4
+      - uses: docker/login-action@v4
+        if: github.event_name != 'pull_request'
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - id: meta
+        uses: docker/metadata-action@v6
+        with:
+          images: ${{ env.IMAGE }}
+          tags: type=sha,prefix=sha-   # immutable tag per commit, e.g. sha-1a2b3c4; never deploy "latest"
+      - uses: docker/build-push-action@v7
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64   # arm64 for kind on Apple Silicon
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}  # org.opencontainers.image.source links the package to this repo
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  deploy:
+    needs: build
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+      - name: Write the new tag into charts/wiki/values.yaml
+        env:
+          TAG: ${{ needs.build.outputs.tag }}
+        run: |
+          sed -i "s/^  tag: .*/  tag: ${TAG}/" charts/wiki/values.yaml
+          git diff --exit-code charts/wiki/values.yaml && { echo "tag unchanged"; exit 0; }
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -am "deploy: wiki ${TAG}"
+          git pull --rebase origin main   # main may have moved while the image was building
+          git push origin HEAD:main

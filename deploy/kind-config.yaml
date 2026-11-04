@@ -1,0 +1,14 @@
+# kind cluster "lab": NodePorts of the control-plane container are published on localhost.
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+name: lab
+nodes:
+  - role: control-plane
+    extraPortMappings:
+      - {containerPort: 30000, hostPort: 8080, listenAddress: 127.0.0.1}  # wiki
+      - {containerPort: 30001, hostPort: 8081, listenAddress: 127.0.0.1}  # ArgoCD UI
+      - {containerPort: 30002, hostPort: 3000, listenAddress: 127.0.0.1}  # Grafana
+      - {containerPort: 30003, hostPort: 9090, listenAddress: 127.0.0.1}  # Prometheus
+      - {containerPort: 30004, hostPort: 9093, listenAddress: 127.0.0.1}  # Alertmanager
+  - role: worker
+  - role: worker

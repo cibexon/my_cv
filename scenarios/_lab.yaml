@@ -1,0 +1,12 @@
+# Base of every drill: one plain copy of the wiki, no NodePort, no monitoring objects.
+replicaCount: 2
+service:
+  type: ClusterIP
+loadgen:
+  enabled: false
+serviceMonitor:
+  enabled: false
+slo:
+  enabled: false
+dashboard:
+  enabled: false

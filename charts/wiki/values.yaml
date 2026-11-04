@@ -1,0 +1,66 @@
+image:
+  repository: ghcr.io/cibexon/my_cv
+  # CI (.github/workflows/ci.yaml) writes the new tag here after every image build; ArgoCD then rolls it out.
+  tag: dev
+  pullPolicy: IfNotPresent
+
+replicaCount: 2
+
+# Faults built into the app: change them here (commit → ArgoCD) to see the SLO burn and the alerts.
+# For a quick one-pod experiment there is also POST /admin/fault — see README.
+faults:
+  errorRate: 0      # share of requests answered with 500, e.g. 0.05 = 5%
+  slowRate: 0       # share of requests delayed by latency
+  latency: 0s       # e.g. 500ms
+  leakMbPerSec: 0   # memory leak → OOMKilled once it reaches resources.limits.memory
+
+contentDir: /content
+extraEnv: []
+
+resources:
+  requests:
+    cpu: 50m
+    memory: 32Mi
+  limits:
+    memory: 96Mi
+
+probes:
+  livenessPath: /healthz
+  readinessPath: /readyz
+
+service:
+  type: NodePort
+  port: 80
+  targetPort: 8080
+  nodePort: 30000   # kind maps it to http://localhost:8080 (deploy/kind-config.yaml)
+
+# Steady traffic from inside the cluster, so the SLI graphs are never empty.
+loadgen:
+  enabled: true
+  rps: 5
+
+serviceMonitor:
+  enabled: true
+  interval: 15s
+
+# Two SLOs over a rolling period. Error budget = 1 - target, e.g. 99.9% → 0.1% of requests may fail.
+slo:
+  enabled: true
+  period: 30d
+  availability:
+    target: 0.999       # share of requests without a 5xx
+  latency:
+    target: 0.99        # share of requests faster than threshold
+    threshold: "0.3"    # seconds; must be one of the histogram buckets in app/main.go
+  # Multi-window, multi-burn-rate alerts (Google SRE Workbook, ch. 5).
+  # Burn rate N = the budget is spent N times faster than "evenly over the period".
+  # The alert fires when both windows exceed it: the long one proves it is significant,
+  # the short one proves it is still happening (so the alert resolves soon after the fix).
+  burnAlerts:
+    - {long: 1h, short: 5m, burnRate: 14.4, severity: page}    # 2% of a 30d budget in 1 hour
+    - {long: 6h, short: 30m, burnRate: 6, severity: page}      # 5% in 6 hours
+    - {long: 1d, short: 2h, burnRate: 3, severity: ticket}     # 10% in 1 day
+    - {long: 3d, short: 6h, burnRate: 1, severity: ticket}     # 10% in 3 days
+
+dashboard:
+  enabled: true
