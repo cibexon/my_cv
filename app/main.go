@@ -268,7 +268,7 @@ func otherLang(lang string) string {
 
 func (s *Site) index(lang string) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		title := "Подготовка к собеседованиям"
+		title := "Подготовка к собеседованиям (v2)"
 		if lang == "en" {
 			title = "Interview prep"
 		}
